@@ -6,14 +6,17 @@ import path from "path";
 // FOLDERS
 // ================================
 
-// Temporary upload folder (all images uploaded here first)
+// Temp folder for card set images
 const TEMP_FOLDER = path.join("./uploads/temp");
 
-// Profile image upload folder
+// Product images folder
+const PRODUCT_FOLDER = path.join("./uploads/cards/productimg");
+
+// Profile image folder
 const PROFILE_FOLDER = path.join("./uploads/profile");
 
-// Make sure both folders exist
-[TEMP_FOLDER, PROFILE_FOLDER].forEach((folder) => {
+// Ensure folders exist
+[TEMP_FOLDER, PRODUCT_FOLDER, PROFILE_FOLDER].forEach((folder) => {
   if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
 });
 
@@ -22,11 +25,15 @@ const PROFILE_FOLDER = path.join("./uploads/profile");
 // ================================
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // All card set images go to TEMP folder
+    // All card set images go to temp
     if (file.fieldname === "images") {
       cb(null, TEMP_FOLDER);
     }
-    // profile image upload
+    // Dynamic product images
+    else if (file.fieldname === "dynamicImages") {
+      cb(null, PRODUCT_FOLDER);
+    }
+    // Profile image upload
     else if (file.fieldname === "profile") {
       cb(null, PROFILE_FOLDER);
     }
@@ -37,14 +44,14 @@ const storage = multer.diskStorage({
 
   filename: (req, file, cb) => {
     cb(null, `${Date.now()}_${file.originalname}`);
-  }
+  },
 });
 
 // ================================
 // EXPORT MULTER HANDLERS
 // ================================
 
-// Upload up to 4 images for a card set
+// Upload multiple card files (images, dynamicImages, etc)
 export const uploadCardFiles = multer({ storage });
 
 // Upload single profile image

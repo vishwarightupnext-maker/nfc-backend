@@ -4,7 +4,8 @@ import {
   updateSimpleCard, 
   deleteSimpleCard, 
   getAllSimpleCards,
-   getCardsByFolder
+   getCardsByFolder,
+   getAllFolders 
 } from "../controllers/simpleCardController.js";
 
 import { uploadCardFiles } from "../middlewares/multer.js";
@@ -27,6 +28,7 @@ router.put(
 router.delete("/:id", deleteSimpleCard);
 
 router.get("/", getAllSimpleCards);
+router.get("/folder", getAllFolders);
 router.get("/folder/:folderName", getCardsByFolder);
 
 export default router;

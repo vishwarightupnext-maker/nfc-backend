@@ -204,3 +204,27 @@ export const getCardsByFolder = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+
+/* ============================================================
+   GET ALL FOLDER NAMES (from DB SimpleCard collection)
+============================================================ */
+export const getAllFolders = async (req, res) => {
+  try {
+    // Fetch only folder names from DB
+    const sets = await SimpleCard.find({}, "folderName").sort({ createdAt: -1 });
+
+    const folders = sets.map((s) => ({
+      folderName: s.folderName
+    }));
+
+    res.json({
+      success: true,
+      folders
+    });
+
+  } catch (err) {
+    console.error("GET ALL FOLDERS ERROR:", err);
+    res.status(500).json({ message: err.message });
+  }
+};

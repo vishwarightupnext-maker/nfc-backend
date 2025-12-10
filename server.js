@@ -7,7 +7,9 @@ import simpleCardRoutes from "./routes/simpleCardRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import googleAuthRoute from "./routes/googleAuthRoute.js";
+import youtubeRoutes from "./routes/youtubeRoutes.js";
 import dotenv from "dotenv";
+
 dotenv.config();
 
 const app = express();
@@ -48,6 +50,9 @@ app.use("/api", simpleCardRoutes);
 // POST /api         → create simple card set
 // GET  /api         → get all simple card sets
 // DELETE /api/:id   → delete simple card set
+
+app.use("/api", youtubeRoutes);
+
 
 // -------------------- Start Server --------------------
 const PORT = 5000;
