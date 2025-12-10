@@ -13,8 +13,8 @@ const cardSchema = new mongoose.Schema(
     frontPdfUrl: String,
     backPdfUrl: String,
 
-    profileImage: String,   // already present (kept here)
-    face: String,           // ✅ NEW IMAGE FIELD
+    profileImage: String,
+    face: String,
 
     email: String,
     phone: String,
@@ -27,6 +27,7 @@ const cardSchema = new mongoose.Schema(
 
     socials: {
       instagram: String,
+      whatsapp: String,
       facebook: String,
       linkedin: String,
       youtube: String,
@@ -37,7 +38,16 @@ const cardSchema = new mongoose.Schema(
       tiktok: String,
       github: String,
       telegram: String,
+      sms: String,
     },
+
+    // ✅ NEW FIELD — Store up to 10 YouTube links
+    youtubeLinks: [
+      {
+        url: String,       // original youtube link
+        embedUrl: String,  // iframe embed link
+      }
+    ],
 
     customIcons: [
       {
@@ -63,8 +73,8 @@ const cardSchema = new mongoose.Schema(
     backBg: String,
     dynamicImgFiles: [
       {
-        fileUrl: String, // store uploaded file URL
-        link: String,    // corresponding link
+        fileUrl: String,
+        link: String,
       },
     ],
     clickCount: { type: Number, default: 0 },
