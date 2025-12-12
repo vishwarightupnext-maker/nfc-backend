@@ -8,6 +8,7 @@ import profileRoutes from "./routes/profileRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import googleAuthRoute from "./routes/googleAuthRoute.js";
 import youtubeRoutes from "./routes/youtubeRoutes.js";
+import contentRoutes from "./routes/cardContentRoutes.js"
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -52,6 +53,7 @@ app.use("/api", simpleCardRoutes);
 // DELETE /api/:id   → delete simple card set
 
 app.use("/api", youtubeRoutes);
+app.use("/api/content", contentRoutes);
 
 
 // -------------------- Start Server --------------------
