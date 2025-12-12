@@ -53,32 +53,120 @@ const createTwoSidePdf = async (frontBase64, backBase64, route) => {
 /* ============================================================
    CREATE CARD
    ============================================================ */
+/* ============================================================
+   Helper: Save Base64 Image → /uploads/cards/<route>/<filename>.png
+============================================================ */
+const saveBase64ToRouteFolder = (base64, route, filename) => {
+  if (!base64) return null;
+
+  const folder = path.join("uploads", "cards", route);
+
+  if (!fs.existsSync(folder)) {
+    fs.mkdirSync(folder, { recursive: true });
+  }
+
+  const filePath = path.join(folder, filename + ".png");
+
+  const base64Data = base64.replace(/^data:image\/\w+;base64,/, "");
+  const buffer = Buffer.from(base64Data, "base64");
+
+  fs.writeFileSync(filePath, buffer);
+
+  // return relative path for database
+  return "/" + filePath.replace(/\\/g, "/");
+};
+
+
+export const getRouteImages = async (req, res) => {
+  try {
+    const { route } = req.params;
+
+    if (!route) {
+      return res.status(400).json({ message: "Route is required" });
+    }
+
+    const folderPath = path.join("uploads", "cards", route);
+
+    // Check folder exists
+    if (!fs.existsSync(folderPath)) {
+      return res.status(404).json({ message: "No images found for this route" });
+    }
+
+    // Read all files inside folder
+    const files = fs.readdirSync(folderPath);
+
+    // Convert filenames → URL paths
+    const imageUrls = files.map(file =>
+      `/uploads/cards/${route}/${file}`
+    );
+
+    return res.json({
+      success: true,
+      route,
+      images: imageUrls,
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+/* ============================================================
+   CREATE CARD (LOCAL STORAGE)
+============================================================ */
 export const createCard = async (req, res) => {
   try {
-    const { route, frontImage, backImage, profileImage, faceImage, ...rest } = req.body;
+    const {
+      route,
+      frontImage1, backImage1,
+      frontImage2, backImage2,
+      profileImage, faceImage,
+      ...rest
+    } = req.body;
 
+    // Check route exists
     const exists = await Card.findOne({ route });
     if (exists) return res.status(400).json({ message: "Route already exists" });
 
-    // Create single front+back PDF
-    const pdfUrl = await createTwoSidePdf(frontImage, backImage, route);
+    // Save 4 card images inside:  /uploads/cards/<route>/
+    const front1 = saveBase64ToRouteFolder(frontImage1, route, "front1");
+    const back1  = saveBase64ToRouteFolder(backImage1,  route, "back1");
+    const front2 = saveBase64ToRouteFolder(frontImage2, route, "front2");
+    const back2  = saveBase64ToRouteFolder(backImage2,  route, "back2");
 
-    const profileImageUrl = await uploadBase64Image(profileImage, "profile");
-    const faceImageUrl = await uploadBase64Image(faceImage, "face-images");
+    // Save profile + face images
+    const profileImageUrl = profileImage
+      ? saveBase64ToRouteFolder(profileImage, route, "profile")
+      : null;
 
+    const faceImageUrl = faceImage
+      ? saveBase64ToRouteFolder(faceImage, route, "face")
+      : null;
+
+    // Create card in DB
     const card = await Card.create({
       ...rest,
       route,
-      pdfUrl,
+      fourCards: {
+        front1,
+        back1,
+        front2,
+        back2,
+      },
       profileImage: profileImageUrl,
-      faceImage: faceImageUrl,
+      face: faceImageUrl,
     });
 
     res.status(201).json({ success: true, card });
+
   } catch (error) {
+    console.log(error);
     res.status(500).json({ message: error.message });
   }
 };
+
+
 
 /* ============================================================
    UPDATE CARD BY ROUTE
@@ -345,6 +433,75 @@ export const deleteCard = async (req, res) => {
   }
 };
 
+const createFourCardPdf = (route) => {
+  return new Promise((resolve, reject) => {
+    const folder = path.join("uploads", "cards", route);
+    const outPdf = path.join(folder, `${route}.pdf`);
+
+    const pdf = new PDFDocument({ size: "A4", layout: "landscape" });
+    const stream = fs.createWriteStream(outPdf);
+    pdf.pipe(stream);
+
+    const pageW = pdf.page.width;
+    const pageH = pdf.page.height;
+
+    const margin = 20;
+
+    // cell sizes for 2x2 layout
+    const cellW = (pageW - margin * 3) / 2;
+    const cellH = (pageH - margin * 3) / 2;
+
+    // cell top-left positions
+    const positions = [
+      { x: margin, y: margin },                         // front1
+      { x: margin * 2 + cellW, y: margin },             // back1
+      { x: margin, y: margin * 2 + cellH },             // front2
+      { x: margin * 2 + cellW, y: margin * 2 + cellH }, // back2
+    ];
+
+    const images = [
+      path.join(folder, "front1.png"),
+      path.join(folder, "back1.png"),
+      path.join(folder, "front2.png"),
+      path.join(folder, "back2.png"),
+    ];
+
+    images.forEach((imgPath, index) => {
+      if (fs.existsSync(imgPath)) {
+        const { x, y } = positions[index];
+
+        pdf.save();
+
+        // Move origin to top-left of cell
+        pdf.translate(x, y);
+
+        // Rotate inside the cell
+        pdf.rotate(90, { origin: [0, 0] });
+
+        // Draw image rotated, with swapped width/height
+        pdf.image(imgPath, 0, -cellW, {
+          fit: [cellH, cellW], // swap fit for rotated image
+          align: "center",
+          valign: "center"
+        });
+
+        pdf.restore();
+      }
+    });
+
+    pdf.end();
+
+    stream.on("finish", () => resolve(`/uploads/cards/${route}/${route}.pdf`));
+    stream.on("error", reject);
+  });
+};
+
+
+
+
+
+
+
 export const getPdfByRoute = async (req, res) => {
   try {
     const { route } = req.params;
@@ -359,11 +516,11 @@ export const getPdfByRoute = async (req, res) => {
       return res.status(404).json({ message: "Card not found" });
     }
 
-    if (!card.pdfUrl) {
-      return res.status(404).json({ message: "PDF not uploaded for this card" });
-    }
+    // Generate PDF every time
+    const pdfUrl = await createFourCardPdf(route);
 
-    return res.status(200).json({ pdfUrl: card.pdfUrl });
+    return res.status(200).json({ success: true, pdfUrl });
+
   } catch (error) {
     console.error("Error fetching PDF by route:", error);
     res.status(500).json({ message: "Server error" });
@@ -371,20 +528,23 @@ export const getPdfByRoute = async (req, res) => {
 };
 
 
-
-
 export const downloadPdfByRoute = async (req, res) => {
   try {
     const { route } = req.params;
 
-    const pdfPath = `uploads/cards/${route}.pdf`;
-    const fullPath = `${process.cwd()}/${pdfPath}`;
+    // Create 4-card PDF
+    const pdfUrl = await createFourCardPdf(route);
 
-    return res.download(fullPath);  
+    const fullPath = path.join(process.cwd(), pdfUrl);
+
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ message: "PDF not found" });
+    }
+
+    res.download(fullPath);
+
   } catch (error) {
     console.error("PDF download error:", error);
-    return res.status(500).json({ message: "Unable to download PDF" });
+    res.status(500).json({ message: "Unable to download PDF" });
   }
 };
-
-

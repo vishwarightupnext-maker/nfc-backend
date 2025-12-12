@@ -11,60 +11,67 @@ import {
   getPdfByRoute,
   downloadPdfByRoute,
   deleteDynamicImage,
+  getRouteImages
 } from "../controllers/cardController.js";
 
 import { uploadCardFiles } from "../middlewares/multer.js";
 
 const router = express.Router();
 
-// Multer fields
 const multerMiddleware = uploadCardFiles.fields([
   { name: "dynamicImages", maxCount: 20 },
   { name: "profileImage", maxCount: 1 },
 ]);
 
 /* ============================================================
-   CREATE (NO FILES ON INITIAL CREATE)
-   ============================================================ */
-router.post("/", createCard);
+   PUBLIC ROUTES (ROUTE-SLUG BASED) — MUST COME FIRST
+============================================================ */
 
-/* ============================================================
-   GET ALL
-   ============================================================ */
-router.get("/", getAllCards);
+// get card by route (public URL)
+router.get("/route/:route", getCardByRoute);
 
-/* ============================================================
-   ID-BASED SYSTEM (NEW) -> MUST COME BEFORE ":route"
-   ============================================================ */
+// update card by route
+router.put("/route/:route", multerMiddleware, updateCardByRoute);
 
-// Get card by ID
-router.get("/admin-profile/:id", getCardById);
+// route images (get 4 card images)
+router.get("/images/:route", getRouteImages);
 
-// Update (with multer)
-router.put("/:id", multerMiddleware, updateCardById);
-
-// Delete Dynamic Image (Gallery Item)
-router.delete("/:cardId/dynamic/:imgId", deleteDynamicImage);
-
-// Delete Card
-router.delete("/:id", deleteCard);
-
-/* ============================================================
-   PDF + TRACK ROUTES (BEFORE catch-all route)
-   ============================================================ */
-
-router.get("/cards/pdf/:route", getPdfByRoute);
+// download 4-card pdf
 router.get("/download/:route", downloadPdfByRoute);
+
+// get pdf url (api)
+router.get("/cards/pdf/:route", getPdfByRoute);
+
+// track clicks
 router.get("/track/:route", trackRouteClick);
 
+
 /* ============================================================
-   OLD ROUTE SYSTEM (MUST BE LAST)
-   ============================================================ */
+   GENERAL ROUTES
+============================================================ */
 
-// Get card by public route slug
-router.get("/:route", getCardByRoute);
+// create card
+router.post("/", createCard);
 
-// Update card via route (legacy)
-router.put("/:route", multerMiddleware, updateCardByRoute);
+// get all cards
+router.get("/", getAllCards);
+
+
+/* ============================================================
+   ID-BASED ADMIN ROUTES — MUST COME AFTER /route/:route
+============================================================ */
+
+// get by ID
+router.get("/admin-profile/:id", getCardById);
+
+// update by ID
+router.put("/:id", multerMiddleware, updateCardById);
+
+// delete card by ID
+router.delete("/:id", deleteCard);
+
+// delete gallery image
+router.delete("/:cardId/dynamic/:imgId", deleteDynamicImage);
+
 
 export default router;
