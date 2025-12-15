@@ -239,29 +239,80 @@ export const updateUserRole = async (req, res) => {
 
 export const updateAdminCount = async (req, res) => {
   try {
-    const { userId, count } = req.body;
+    const { userId, cardLimit } = req.body;
 
+    // extra safety (even though middleware already checks)
     if (req.user.role !== "super-admin") {
-      return res.status(403).json({ message: "Access denied. Super Admin only" });
+      return res
+        .status(403)
+        .json({ message: "Access denied. Super Admin only" });
     }
 
     const user = await User.findById(userId);
 
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    if (user.role !== "admin") {
-      return res.status(400).json({ message: "Count can only be updated for admin users" });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
 
-    user.count = count;
+    if (user.role !== "admin") {
+      return res
+        .status(400)
+        .json({ message: "Limit can only be updated for admin users" });
+    }
+
+    // ❌ Prevent breaking existing data
+    if (cardLimit < user.cardsCreated) {
+      return res.status(400).json({
+        message: `Admin has already created ${user.cardsCreated} cards`,
+      });
+    }
+
+    // ✅ Update limit
+    user.cardLimit = cardLimit;
     await user.save();
 
     res.json({
-      message: "Admin count updated successfully",
-      user,
+      message: "Admin card limit updated successfully",
+      admin: {
+        id: user._id,
+        name: user.name,
+        cardLimit: user.cardLimit,
+        cardsCreated: user.cardsCreated,
+        availableCards: user.cardLimit - user.cardsCreated,
+      },
     });
   } catch (error) {
-    console.error("UPDATE ADMIN COUNT ERROR:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("UPDATE ADMIN LIMIT ERROR:", error);
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+
+// ---------------- GET ALL ADMINS ----------------
+// ---------------- GET ALL ADMIN USERS ----------------
+export const getAllAdmins = async (req, res) => {
+  try {
+    // Only super-admin can see admin list
+    if (req.user.role !== "super-admin") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const admins = await User.find({ role: "admin" })
+      .select("-password -otp -otpExpires");
+
+    res.json({
+      success: true,
+      count: admins.length,
+      admins,
+    });
+  } catch (error) {
+    console.error("GET ADMINS ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
