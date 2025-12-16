@@ -14,7 +14,26 @@ const cardSchema = new mongoose.Schema(
     designation: String,
     website: String,
     route: { type: String, required: true, unique: true },
-    extraAddress: String,
+
+    /* ✅ STRUCTURED EXTRA ADDRESS */
+extraAddress: {
+  doorNo: String,
+  apartment: String,
+  street: String,
+  city: String,
+  state: String,
+  pinCode: String,
+
+  phoneNumber: {
+    type: String,
+    trim: true,
+    match: [
+      /^\+?[0-9]{10,15}$/,
+      "Invalid mobile number", // ✅ ERROR MESSAGE
+    ],
+  },
+},
+
 
     fourCards: {
       front1: String,
@@ -89,5 +108,5 @@ const cardSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// ⭐ FIX: Prevent OverwriteModelError
+// ⭐ Prevent OverwriteModelError
 export default mongoose.models.Card || mongoose.model("Card", cardSchema);
