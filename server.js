@@ -11,6 +11,8 @@ import youtubeRoutes from "./routes/youtubeRoutes.js";
 import contentRoutes from "./routes/cardContentRoutes.js"
 import userRoutes from "./routes/userRoutes.js"
 import email from "./routes/emailRoutes.js"
+import admincard from "./routes/adminCard.routes.js"
+import userRoutess from "./routes/user.routes.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -53,10 +55,14 @@ app.use("/api", simpleCardRoutes);
 // POST /api         → create simple card set
 // GET  /api         → get all simple card sets
 // DELETE /api/:id   → delete simple card set
+app.use("/api", admincard);  
+
+app.use("/api", userRoutes);
+app.use("/api", userRoutess);
 
 app.use("/api", youtubeRoutes);
 app.use("/api/content", contentRoutes);
-app.use("/api", userRoutes);
+
 
 app.use("/api/email", email);
 

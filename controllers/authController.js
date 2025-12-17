@@ -316,3 +316,36 @@ export const getAllAdmins = async (req, res) => {
     });
   }
 };
+
+
+
+// ---------------- GET LOGGED-IN USER (ME) ----------------
+export const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select(
+      "-password -otp -otpExpires"
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        cardLimit: user.cardLimit,
+        cardsCreated: user.cardsCreated,
+      },
+    });
+  } catch (error) {
+    console.error("GET ME ERROR:", error);
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+

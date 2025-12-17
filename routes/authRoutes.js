@@ -8,7 +8,8 @@ import {
   getAllUsers,
   updateUserRole,
   updateAdminCount,
-  getAllAdmins
+  getAllAdmins,
+  getMe
 } from "../controllers/authController.js";
 
 import auth from "../middlewares/auth.js";
@@ -85,5 +86,8 @@ router.get(
     res.json({ message: "User Dashboard Access Granted" });
   }
 );
+
+
+router.get("/me", auth, getMe);
 
 export default router; // ✅ KEEP THIS

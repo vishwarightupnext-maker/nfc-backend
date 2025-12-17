@@ -614,54 +614,66 @@ const createFourCardPdf = (route) => {
 
     const margin = 20;
 
-    // cell sizes for 2x2 layout
+    // 2x2 grid
     const cellW = (pageW - margin * 3) / 2;
     const cellH = (pageH - margin * 3) / 2;
 
-    // cell top-left positions
+    // EXACT CARD SIZE (cm → pt)
+    const CARD_W = 252.28; // 8.9 cm
+    const CARD_H = 161.57; // 5.7 cm
+
     const positions = [
-      { x: margin, y: margin },                         // front1
-      { x: margin * 2 + cellW, y: margin },             // back1
-      { x: margin, y: margin * 2 + cellH },             // front2
-      { x: margin * 2 + cellW, y: margin * 2 + cellH }, // back2
+      { x: margin, y: margin },
+      { x: margin * 2 + cellW, y: margin },
+      { x: margin, y: margin * 2 + cellH },
+      { x: margin * 2 + cellW, y: margin * 2 + cellH },
     ];
 
     const images = [
-      path.join(folder, "front1.png"),
-      path.join(folder, "back1.png"),
-      path.join(folder, "front2.png"),
-      path.join(folder, "back2.png"),
+      "front1.png",
+      "back1.png",
+      "front2.png",
+      "back2.png",
     ];
 
-    images.forEach((imgPath, index) => {
-      if (fs.existsSync(imgPath)) {
-        const { x, y } = positions[index];
+    images.forEach((img, index) => {
+      const imgPath = path.join(folder, img);
+      if (!fs.existsSync(imgPath)) return;
 
-        pdf.save();
+      const { x, y } = positions[index];
 
-        // Move origin to top-left of cell
-        pdf.translate(x, y);
+      pdf.save();
 
-        // Rotate inside the cell
-        pdf.rotate(90, { origin: [0, 0] });
+      // Move to cell
+      pdf.translate(x, y);
 
-        // Draw image rotated, with swapped width/height
-        pdf.image(imgPath, 0, -cellW, {
-          fit: [cellH, cellW], // swap fit for rotated image
-          align: "center",
-          valign: "center"
-        });
+      // Center card inside cell
+      const centerX = (cellW - CARD_H) / 2;
+      const centerY = (cellH - CARD_W) / 2;
 
-        pdf.restore();
-      }
+      // Rotate 90° (print-ready)
+      pdf.translate(centerX + CARD_H / 2, centerY + CARD_W / 2);
+      pdf.rotate(90);
+      pdf.translate(-CARD_W / 2, -CARD_H / 2);
+
+      // Draw image EXACT SIZE
+      pdf.image(imgPath, 0, 0, {
+        width: CARD_W,
+        height: CARD_H,
+      });
+
+      pdf.restore();
     });
 
     pdf.end();
 
-    stream.on("finish", () => resolve(`/uploads/cards/${route}/${route}.pdf`));
+    stream.on("finish", () =>
+      resolve(`/uploads/cards/${route}/${route}.pdf`)
+    );
     stream.on("error", reject);
   });
 };
+
 
 
 
@@ -772,4 +784,6 @@ export const getCardsByAdmin = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+
 
