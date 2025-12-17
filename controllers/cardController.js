@@ -3,6 +3,8 @@ import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
 import fs from "fs";
 import path from "path";
+import User from "../models/User.js";
+
 
 /* ============================================================
    Helper: Upload Base64 Image → Cloudinary
@@ -115,27 +117,174 @@ export const getRouteImages = async (req, res) => {
 /* ============================================================
    CREATE CARD (LOCAL STORAGE)
 ============================================================ */
+/* ============================================================
+   CREATE CARD (WITH AUTH + ROLE LIMITS)
+============================================================ */
+// export const createCard = async (req, res) => {
+//   try {
+//     const userId = req.user?.id; // MUST come from auth middleware
+
+//     if (!userId) {
+//       return res.status(401).json({ message: "Unauthorized: No user ID" });
+//     }
+
+//     const user = await User.findById(userId);
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     const {
+//       route,
+//       frontImage1, backImage1,
+//       frontImage2, backImage2,
+//       profileImage, faceImage,
+//       ...rest
+//     } = req.body;
+
+//     // Check route exists
+//     const exists = await Card.findOne({ route });
+//     if (exists) return res.status(400).json({ message: "Route already exists" });
+
+//     /* -------------------------------------------------------
+//        ROLE LIMIT LOGIC
+//     -------------------------------------------------------- */
+
+//     // 1️⃣ USER → Only ONE card allowed
+//     if (user.role === "user") {
+//       const existingCard = await Card.findOne({ userId });
+//       if (existingCard) {
+//         return res.status(400).json({
+//           message: "You can create only one card!",
+//         });
+//       }
+//     }
+
+//     // 2️⃣ ADMIN → limited by "count"
+//     if (user.role === "admin") {
+//       const totalCards = await Card.countDocuments({ userId });
+
+//       if (totalCards >= user.count) {
+//         return res.status(400).json({
+//           message: `Your limit is ${user.count} cards`,
+//         });
+//       }
+//     }
+
+//     // 3️⃣ SUPER ADMIN → unlimited (no check)
+
+//     /* -------------------------------------------------------
+//        SAVE FOUR IMAGES
+//     -------------------------------------------------------- */
+
+//     const front1 = saveBase64ToRouteFolder(frontImage1, route, "front1");
+//     const back1  = saveBase64ToRouteFolder(backImage1,  route, "back1");
+//     const front2 = saveBase64ToRouteFolder(frontImage2, route, "front2");
+//     const back2  = saveBase64ToRouteFolder(backImage2,  route, "back2");
+
+//     const profileImageUrl = profileImage
+//       ? saveBase64ToRouteFolder(profileImage, route, "profile")
+//       : null;
+
+//     const faceImageUrl = faceImage
+//       ? saveBase64ToRouteFolder(faceImage, route, "face")
+//       : null;
+
+//     /* -------------------------------------------------------
+//        CREATE NEW CARD
+//     -------------------------------------------------------- */
+//     const card = await Card.create({
+//       ...rest,
+//       route,
+//       userId, // 🔥 IMPORTANT
+//       fourCards: {
+//         front1,
+//         back1,
+//         front2,
+//         back2,
+//       },
+//       profileImage: profileImageUrl,
+//       face: faceImageUrl,
+//     });
+
+//     res.status(201).json({
+//       success: true,
+//       message: "Card created successfully",
+//       card,
+//     });
+
+//   } catch (error) {
+//     console.error("Create card error:", error);
+//     res.status(500).json({ message: error.message });
+//   }
+// };
+
+
 export const createCard = async (req, res) => {
   try {
+    const userId = req.user?.id; // from auth middleware
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: No user ID" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     const {
       route,
-      frontImage1, backImage1,
-      frontImage2, backImage2,
-      profileImage, faceImage,
+      frontImage1,
+      backImage1,
+      frontImage2,
+      backImage2,
+      profileImage,
+      faceImage,
       ...rest
     } = req.body;
 
-    // Check route exists
+    /* -------------------------------------------------------
+       ROUTE CHECK (GLOBAL UNIQUE)
+    -------------------------------------------------------- */
     const exists = await Card.findOne({ route });
-    if (exists) return res.status(400).json({ message: "Route already exists" });
+    if (exists) {
+      return res.status(400).json({ message: "Route already exists" });
+    }
 
-    // Save 4 card images inside:  /uploads/cards/<route>/
+    /* -------------------------------------------------------
+       ROLE BASED LIMIT LOGIC
+    -------------------------------------------------------- */
+
+    // 1️⃣ NORMAL USER → ONLY ONE CARD
+    if (user.role === "user") {
+      const existingCard = await Card.findOne({ userId });
+      if (existingCard) {
+        return res.status(400).json({
+          message: "You can create only one card!",
+        });
+      }
+    }
+
+    // 2️⃣ ADMIN → LIMITED BY cardLimit
+    if (user.role === "admin") {
+      if (user.cardsCreated >= user.cardLimit) {
+        return res.status(400).json({
+          message: "Card limit reached",
+          availableCards: user.cardLimit - user.cardsCreated,
+        });
+      }
+    }
+
+    // 3️⃣ SUPER ADMIN → NO LIMIT
+
+    /* -------------------------------------------------------
+       SAVE IMAGES (UNCHANGED)
+    -------------------------------------------------------- */
     const front1 = saveBase64ToRouteFolder(frontImage1, route, "front1");
     const back1  = saveBase64ToRouteFolder(backImage1,  route, "back1");
     const front2 = saveBase64ToRouteFolder(frontImage2, route, "front2");
     const back2  = saveBase64ToRouteFolder(backImage2,  route, "back2");
 
-    // Save profile + face images
     const profileImageUrl = profileImage
       ? saveBase64ToRouteFolder(profileImage, route, "profile")
       : null;
@@ -144,10 +293,13 @@ export const createCard = async (req, res) => {
       ? saveBase64ToRouteFolder(faceImage, route, "face")
       : null;
 
-    // Create card in DB
+    /* -------------------------------------------------------
+       CREATE CARD
+    -------------------------------------------------------- */
     const card = await Card.create({
       ...rest,
       route,
+      userId, // 🔥 LINK CARD TO ADMIN
       fourCards: {
         front1,
         back1,
@@ -158,14 +310,29 @@ export const createCard = async (req, res) => {
       face: faceImageUrl,
     });
 
-    res.status(201).json({ success: true, card });
+    /* -------------------------------------------------------
+       🔥 AUTO INCREMENT cardsCreated (ADMIN ONLY)
+    -------------------------------------------------------- */
+    if (user.role === "admin") {
+      user.cardsCreated += 1;
+      await user.save();
+    }
 
+    res.status(201).json({
+      success: true,
+      message: "Card created successfully",
+      card,
+      cardsCreated: user.cardsCreated,
+      availableCards:
+        user.role === "admin"
+          ? user.cardLimit - user.cardsCreated
+          : null,
+    });
   } catch (error) {
-    console.log(error);
+    console.error("Create card error:", error);
     res.status(500).json({ message: error.message });
   }
 };
-
 
 
 /* ============================================================
@@ -548,3 +715,61 @@ export const downloadPdfByRoute = async (req, res) => {
     res.status(500).json({ message: "Unable to download PDF" });
   }
 };
+
+
+export const getMyCards = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const cards = await Card.find({ userId }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      cards,
+    });
+
+  } catch (err) {
+    console.error("Get user cards error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+export const getCardsByAdmin = async (req, res) => {
+  try {
+    const { adminId } = req.params;
+
+    // Only super-admin or the admin himself
+    if (
+      req.user.role !== "super-admin" &&
+      req.user.id !== adminId
+    ) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    // Validate admin exists
+    const admin = await User.findById(adminId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    const cards = await Card.find({ userId: adminId }).sort({
+      createdAt: -1,
+    });
+
+    res.json({
+      success: true,
+      admin: {
+        _id: admin._id,
+        name: admin.name,
+        email: admin.email,
+      },
+      totalCards: cards.length,
+      cards,
+    });
+  } catch (error) {
+    console.error("GET CARDS BY ADMIN ERROR:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+

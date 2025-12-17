@@ -2,18 +2,20 @@ import mongoose from "mongoose";
 
 const cardSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
     name: { type: String, required: true },
     surname: String,
     businessName: String,
     designation: String,
     website: String,
-
     route: { type: String, required: true, unique: true },
     extraAddress: String,
 
-    /* ========================================================
-       4 CARD SYSTEM (NEW)
-    ======================================================== */
     fourCards: {
       front1: String,
       back1: String,
@@ -21,27 +23,17 @@ const cardSchema = new mongoose.Schema(
       back2: String,
     },
 
-    /* ========================================================
-       Profile Images
-    ======================================================== */
     profileImage: String,
     face: String,
 
-    /* ========================================================
-       Contact Info
-    ======================================================== */
     email: String,
     phone: String,
     whatsapp: String,
-
     phonePe: String,
     gpay: String,
     paytm: String,
     upiId: String,
 
-    /* ========================================================
-       Socials
-    ======================================================== */
     socials: {
       instagram: String,
       whatsapp: String,
@@ -58,19 +50,13 @@ const cardSchema = new mongoose.Schema(
       sms: String,
     },
 
-    /* ========================================================
-       YouTube Links
-    ======================================================== */
     youtubeLinks: [
       {
         url: String,
         embedUrl: String,
-      }
+      },
     ],
 
-    /* ========================================================
-       Custom Icons
-    ======================================================== */
     customIcons: [
       {
         iconName: String,
@@ -79,9 +65,6 @@ const cardSchema = new mongoose.Schema(
       },
     ],
 
-    /* ========================================================
-       Front / Back Data Blocks
-    ======================================================== */
     frontData: {
       line1: String,
       line2: String,
@@ -94,9 +77,6 @@ const cardSchema = new mongoose.Schema(
       about: String,
     },
 
-    /* ========================================================
-       Gallery Images
-    ======================================================== */
     dynamicImgFiles: [
       {
         fileUrl: String,
@@ -109,4 +89,5 @@ const cardSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model("Card", cardSchema);
+// ⭐ FIX: Prevent OverwriteModelError
+export default mongoose.models.Card || mongoose.model("Card", cardSchema);

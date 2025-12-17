@@ -11,10 +11,14 @@ import {
   getPdfByRoute,
   downloadPdfByRoute,
   deleteDynamicImage,
-  getRouteImages
+  getRouteImages,
+  getMyCards,
+  getCardsByAdmin,
 } from "../controllers/cardController.js";
 
 import { uploadCardFiles } from "../middlewares/multer.js";
+import auth from "../middlewares/auth.js";
+import role from "../middlewares/role.js";
 
 const router = express.Router();
 
@@ -51,11 +55,12 @@ router.get("/track/:route", trackRouteClick);
 ============================================================ */
 
 // create card
-router.post("/", createCard);
+router.post("/", auth, createCard);
 
 // get all cards
 router.get("/", getAllCards);
 
+router.get("/my-cards", auth, getMyCards);
 
 /* ============================================================
    ID-BASED ADMIN ROUTES — MUST COME AFTER /route/:route
@@ -72,6 +77,14 @@ router.delete("/:id", deleteCard);
 
 // delete gallery image
 router.delete("/:cardId/dynamic/:imgId", deleteDynamicImage);
+
+router.get(
+  "/admin/:adminId",
+  auth,
+  role("super-admin", "admin"),
+  getCardsByAdmin
+);
+
 
 
 export default router;

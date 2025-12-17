@@ -9,6 +9,8 @@ import authRoutes from "./routes/authRoutes.js";
 import googleAuthRoute from "./routes/googleAuthRoute.js";
 import youtubeRoutes from "./routes/youtubeRoutes.js";
 import contentRoutes from "./routes/cardContentRoutes.js"
+import userRoutes from "./routes/userRoutes.js"
+import email from "./routes/emailRoutes.js"
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -29,7 +31,7 @@ app.use("/uploads", express.static("uploads"));
 
 // -------------------- MongoDB --------------------
 mongoose
-  .connect("mongodb+srv://vishwarightupnext_db_user:esBWPPXwZhxXXE8I@cluster0.b3l7zes.mongodb.net/c?appName=Cluster0")
+  .connect("mongodb+srv://vishwarightupnext_db_user:esBWPPXwZhxXXE8I@cluster0.b3l7zes.mongodb.net/cc?appName=Cluster0")
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.log("❌ DB Error:", err));
 
@@ -54,10 +56,13 @@ app.use("/api", simpleCardRoutes);
 
 app.use("/api", youtubeRoutes);
 app.use("/api/content", contentRoutes);
+app.use("/api", userRoutes);
+
+app.use("/api/email", email);
 
 
 // -------------------- Start Server --------------------
 const PORT = 5000;
 app.listen(PORT, "0.0.0.0", () =>
-  console.log(`🚀 Server running at http://192.168.1.40:${PORT}`)
+  console.log(`🚀 Server running at http://192.168.1.36:${PORT}`)
 );
