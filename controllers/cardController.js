@@ -240,8 +240,43 @@ export const createCard = async (req, res) => {
       backImage2,
       profileImage,
       faceImage,
+      extraAddress, // ✅ EXTRACT
       ...rest
     } = req.body;
+
+    /* -------------------------------------------------------
+       ✅ EXTRA ADDRESS VALIDATION (MANDATORY)
+    -------------------------------------------------------- */
+
+    if (!extraAddress) {
+      return res.status(400).json({
+        message: "Extra address is required",
+      });
+    }
+
+    const {
+      doorNo,
+      street,
+      city,
+      state,
+      pinCode,
+      phoneNumber,
+    } = extraAddress;
+
+    // Required fields check
+    if (!doorNo || !street || !city || !state || !pinCode || !phoneNumber) {
+      return res.status(400).json({
+        message: "All address fields including mobile number are required",
+      });
+    }
+
+    // Mobile number validation
+    const phoneRegex = /^\+?[0-9]{10,15}$/;
+    if (!phoneRegex.test(phoneNumber)) {
+      return res.status(400).json({
+        message: "Invalid mobile number",
+      });
+    }
 
     /* -------------------------------------------------------
        ROUTE CHECK (GLOBAL UNIQUE)
@@ -275,10 +310,8 @@ export const createCard = async (req, res) => {
       }
     }
 
-    // 3️⃣ SUPER ADMIN → NO LIMIT
-
     /* -------------------------------------------------------
-       SAVE IMAGES (UNCHANGED)
+       SAVE IMAGES
     -------------------------------------------------------- */
     const front1 = saveBase64ToRouteFolder(frontImage1, route, "front1");
     const back1  = saveBase64ToRouteFolder(backImage1,  route, "back1");
@@ -294,12 +327,13 @@ export const createCard = async (req, res) => {
       : null;
 
     /* -------------------------------------------------------
-       CREATE CARD
+       CREATE CARD (WITH extraAddress)
     -------------------------------------------------------- */
     const card = await Card.create({
       ...rest,
       route,
-      userId, // 🔥 LINK CARD TO ADMIN
+      userId,
+      extraAddress, // ✅ SAVED
       fourCards: {
         front1,
         back1,
@@ -311,7 +345,7 @@ export const createCard = async (req, res) => {
     });
 
     /* -------------------------------------------------------
-       🔥 AUTO INCREMENT cardsCreated (ADMIN ONLY)
+       AUTO INCREMENT cardsCreated (ADMIN ONLY)
     -------------------------------------------------------- */
     if (user.role === "admin") {
       user.cardsCreated += 1;
