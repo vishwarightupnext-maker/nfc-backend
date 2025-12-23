@@ -8,6 +8,7 @@ const cardSchema = new mongoose.Schema(
       required: true,
     },
 
+    /* ================= BASIC DETAILS ================= */
     name: { type: String, required: true },
     surname: String,
     businessName: String,
@@ -15,26 +16,22 @@ const cardSchema = new mongoose.Schema(
     website: String,
     route: { type: String, required: true, unique: true },
 
-    /* ✅ STRUCTURED EXTRA ADDRESS */
-extraAddress: {
-  doorNo: String,
-  apartment: String,
-  street: String,
-  city: String,
-  state: String,
-  pinCode: String,
+    /* ================= ADDRESS ================= */
+    extraAddress: {
+      doorNo: String,
+      apartment: String,
+      street: String,
+      city: String,
+      state: String,
+      pinCode: String,
+      phoneNumber: {
+        type: String,
+        trim: true,
+        match: [/^\+?[0-9]{10,15}$/, "Invalid mobile number"],
+      },
+    },
 
-  phoneNumber: {
-    type: String,
-    trim: true,
-    match: [
-      /^\+?[0-9]{10,15}$/,
-      "Invalid mobile number", // ✅ ERROR MESSAGE
-    ],
-  },
-},
-
-
+    /* ================= CARD IMAGES ================= */
     fourCards: {
       front1: String,
       back1: String,
@@ -45,6 +42,7 @@ extraAddress: {
     profileImage: String,
     face: String,
 
+    /* ================= CONTACT ================= */
     email: String,
     phone: String,
     whatsapp: String,
@@ -53,6 +51,7 @@ extraAddress: {
     paytm: String,
     upiId: String,
 
+    /* ================= SOCIAL ================= */
     socials: {
       instagram: String,
       whatsapp: String,
@@ -69,20 +68,15 @@ extraAddress: {
       sms: String,
     },
 
-    youtubeLinks: [
-      {
-        url: String,
-        embedUrl: String,
-      },
-    ],
+    youtubeLinks: [{ url: String, embedUrl: String }],
 
-    customIcons: [
-      {
-        iconName: String,
-        iconUrl: String,
-        link: String,
-      },
-    ],
+    googleMapLinks: [{ 
+  url: String, 
+  embedUrl: String 
+}],
+
+
+    customIcons: [{ iconName: String, iconUrl: String, link: String }],
 
     frontData: {
       line1: String,
@@ -96,17 +90,76 @@ extraAddress: {
       about: String,
     },
 
-    dynamicImgFiles: [
-      {
-        fileUrl: String,
-        link: String,
-      },
-    ],
+   dynamicImgFiles: [
+  {
+    title: {
+      type: String,
+      trim: true,
+    },
+    fileUrl: {
+      type: String,
+      required: true,
+    },
+    link: {
+      type: String,
+      trim: true,
+    },
+  },
+],
+
 
     clickCount: { type: Number, default: 0 },
+
+    /* =====================================================
+       💳 PAYMENT & VALIDITY (NEW)
+    ===================================================== */
+
+    isPaid: {
+      type: Boolean,
+      default: false, // unpaid by default
+    },
+
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "paid", "failed"],
+      default: "pending",
+    },
+
+    paymentOrderId: {
+      type: String, // Razorpay order_id
+      default: null,
+    },
+
+    paymentId: {
+      type: String, // Razorpay payment_id
+      default: null,
+    },
+
+    paidAt: {
+      type: Date,
+      default: null,
+    },
+
+    /* ⏳ 60 days validity ONLY IF UNPAID */
+    expiresAt: {
+      type: Date,
+      default: function () {
+        return new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+      },
+    },
   },
   { timestamps: true }
 );
 
-// ⭐ Prevent OverwriteModelError
+/* =====================================================
+   🧹 AUTO DELETE UNPAID EXPIRED CARDS
+===================================================== */
+cardSchema.index(
+  { expiresAt: 1 },
+  {
+    expireAfterSeconds: 0,
+    partialFilterExpression: { isPaid: false },
+  }
+);
+
 export default mongoose.models.Card || mongoose.model("Card", cardSchema);

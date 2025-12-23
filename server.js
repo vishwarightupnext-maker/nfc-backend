@@ -13,6 +13,9 @@ import userRoutes from "./routes/userRoutes.js"
 import email from "./routes/emailRoutes.js"
 import admincard from "./routes/adminCard.routes.js"
 import userRoutess from "./routes/user.routes.js";
+import paymentRoutes from "./routes/paymentRoutes.js"
+import googleMapRoutes from "./routes/googleRoutes.js";
+
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -48,7 +51,10 @@ app.get("/", (req, res) => {
 
 // -------------------- Card Routes --------------------
 app.use("/api/cards", cardRoutes);            // Old front/back cards
-app.use("/api/cards", profileRoutes);         // Profile image upload (optional)
+app.use("/api/cards", profileRoutes);     
+
+app.use("/api/payment", paymentRoutes);
+// Profile image upload (optional)
 
 // -------------------- SIMPLE 4-IMAGE CARD SET ROUTER --------------------
 app.use("/api", simpleCardRoutes);  
@@ -65,7 +71,7 @@ app.use("/api/content", contentRoutes);
 
 
 app.use("/api/email", email);
-
+app.use("/api/cards", googleMapRoutes);
 
 // -------------------- Start Server --------------------
 const PORT = 5000;

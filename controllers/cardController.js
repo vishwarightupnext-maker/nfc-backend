@@ -4,6 +4,7 @@ import cloudinary from "../config/cloudinary.js";
 import fs from "fs";
 import path from "path";
 import User from "../models/User.js";
+import razorpay from "../config/razorpay.js"
 
 
 /* ============================================================
@@ -221,7 +222,7 @@ export const getRouteImages = async (req, res) => {
 
 export const createCard = async (req, res) => {
   try {
-    const userId = req.user?.id; // from auth middleware
+    const userId = req.user?.id;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized: No user ID" });
@@ -240,46 +241,32 @@ export const createCard = async (req, res) => {
       backImage2,
       profileImage,
       faceImage,
-      extraAddress, // ✅ EXTRACT
+      extraAddress,
       ...rest
     } = req.body;
 
     /* -------------------------------------------------------
-       ✅ EXTRA ADDRESS VALIDATION (MANDATORY)
+       ✅ EXTRA ADDRESS VALIDATION
     -------------------------------------------------------- */
-
     if (!extraAddress) {
-      return res.status(400).json({
-        message: "Extra address is required",
-      });
+      return res.status(400).json({ message: "Extra address is required" });
     }
 
-    const {
-      doorNo,
-      street,
-      city,
-      state,
-      pinCode,
-      phoneNumber,
-    } = extraAddress;
+    const { doorNo, street, city, state, pinCode, phoneNumber } = extraAddress;
 
-    // Required fields check
     if (!doorNo || !street || !city || !state || !pinCode || !phoneNumber) {
       return res.status(400).json({
         message: "All address fields including mobile number are required",
       });
     }
 
-    // Mobile number validation
     const phoneRegex = /^\+?[0-9]{10,15}$/;
     if (!phoneRegex.test(phoneNumber)) {
-      return res.status(400).json({
-        message: "Invalid mobile number",
-      });
+      return res.status(400).json({ message: "Invalid mobile number" });
     }
 
     /* -------------------------------------------------------
-       ROUTE CHECK (GLOBAL UNIQUE)
+       ROUTE UNIQUE CHECK
     -------------------------------------------------------- */
     const exists = await Card.findOne({ route });
     if (exists) {
@@ -290,17 +277,10 @@ export const createCard = async (req, res) => {
        ROLE BASED LIMIT LOGIC
     -------------------------------------------------------- */
 
-    // 1️⃣ NORMAL USER → ONLY ONE CARD
-    if (user.role === "user") {
-      const existingCard = await Card.findOne({ userId });
-      if (existingCard) {
-        return res.status(400).json({
-          message: "You can create only one card!",
-        });
-      }
-    }
+    // USER → only one card
+   
 
-    // 2️⃣ ADMIN → LIMITED BY cardLimit
+    // ADMIN → limit
     if (user.role === "admin") {
       if (user.cardsCreated >= user.cardLimit) {
         return res.status(400).json({
@@ -327,40 +307,58 @@ export const createCard = async (req, res) => {
       : null;
 
     /* -------------------------------------------------------
-       CREATE CARD (WITH extraAddress)
+       CREATE CARD (DEFAULT: UNPAID)
     -------------------------------------------------------- */
     const card = await Card.create({
       ...rest,
       route,
       userId,
-      extraAddress, // ✅ SAVED
-      fourCards: {
-        front1,
-        back1,
-        front2,
-        back2,
-      },
+      extraAddress,
+      fourCards: { front1, back1, front2, back2 },
       profileImage: profileImageUrl,
       face: faceImageUrl,
     });
 
     /* -------------------------------------------------------
-       AUTO INCREMENT cardsCreated (ADMIN ONLY)
+       ADMIN / SUPER ADMIN → FREE (NO PAYMENT)
     -------------------------------------------------------- */
-    if (user.role === "admin") {
-      user.cardsCreated += 1;
-      await user.save();
+    if (user.role !== "user") {
+      card.isPaid = true;
+      card.paymentStatus = "paid";
+      card.expiresAt = null;
+      await card.save();
+
+      if (user.role === "admin") {
+        user.cardsCreated += 1;
+        await user.save();
+      }
+
+      return res.status(201).json({
+        success: true,
+        paymentRequired: false,
+        message: "Card created successfully",
+        card,
+      });
     }
 
-    res.status(201).json({
+    /* -------------------------------------------------------
+       USER → RAZORPAY PAYMENT REQUIRED
+    -------------------------------------------------------- */
+    const order = await razorpay.orders.create({
+      amount: 499 * 100, // ₹499
+      currency: "INR",
+      receipt: `card_${card._id}`,
+    });
+
+    card.paymentOrderId = order.id;
+    await card.save();
+
+    return res.status(201).json({
       success: true,
-      message: "Card created successfully",
-      card,
-      cardsCreated: user.cardsCreated,
-      availableCards:
-        user.role === "admin"
-          ? user.cardLimit - user.cardsCreated
-          : null,
+      paymentRequired: true,
+      message: "Card created. Payment required.",
+      cardId: card._id,
+      order,
     });
   } catch (error) {
     console.error("Create card error:", error);
@@ -414,57 +412,88 @@ export const updateCardById = async (req, res) => {
     /* --------------------------------------------
      0️⃣ Parse JSON fields safely
     -------------------------------------------- */
-    if (req.body.frontData) updateData.frontData = JSON.parse(req.body.frontData);
-    if (req.body.backData) updateData.backData = JSON.parse(req.body.backData);
-    if (req.body.socials) updateData.socials = JSON.parse(req.body.socials);
+    if (req.body.frontData)
+      updateData.frontData = JSON.parse(req.body.frontData);
+
+    if (req.body.backData)
+      updateData.backData = JSON.parse(req.body.backData);
+
+    if (req.body.socials)
+      updateData.socials = JSON.parse(req.body.socials);
 
     /* --------------------------------------------
-     1️⃣ Existing dynamic images from frontend
+     1️⃣ Normalize arrays (important)
+    -------------------------------------------- */
+    const existingImgs = req.body.existingDynamicImages
+      ? Array.isArray(req.body.existingDynamicImages)
+        ? req.body.existingDynamicImages
+        : [req.body.existingDynamicImages]
+      : [];
+
+    const dynamicLinks = req.body.dynamicLinks
+      ? Array.isArray(req.body.dynamicLinks)
+        ? req.body.dynamicLinks
+        : [req.body.dynamicLinks]
+      : [];
+
+    const dynamicTitles = req.body.dynamicTitles
+      ? Array.isArray(req.body.dynamicTitles)
+        ? req.body.dynamicTitles
+        : [req.body.dynamicTitles]
+      : [];
+
+    /* --------------------------------------------
+     2️⃣ EXISTING dynamic images
     -------------------------------------------- */
     let existingDynamicImages = [];
 
-    if (req.body.existingDynamicImages) {
-      const existingImgs = Array.isArray(req.body.existingDynamicImages)
-        ? req.body.existingDynamicImages
-        : [req.body.existingDynamicImages];
-
-      const existingLinks = Array.isArray(req.body.dynamicLinks)
-        ? req.body.dynamicLinks
-        : [req.body.dynamicLinks];
-
-      existingImgs.forEach((imgUrl, i) => {
-        existingDynamicImages.push({
-          fileUrl: imgUrl,
-          link: existingLinks[i] || "",
-        });
+    existingImgs.forEach((imgUrl, i) => {
+      existingDynamicImages.push({
+        fileUrl: imgUrl,
+        link: dynamicLinks[i] || "",
+        title: dynamicTitles[i] || "",
       });
-    }
+    });
 
     /* --------------------------------------------
-     2️⃣ NEW dynamic uploaded images
+     3️⃣ NEW uploaded dynamic images
     -------------------------------------------- */
     let uploadedImages = [];
 
-    if (req.files?.dynamicImages && req.files.dynamicImages.length > 0) {
-      uploadedImages = req.files.dynamicImages.map((file, index) => ({
-        fileUrl: `${req.protocol}://${req.get("host")}/uploads/cards/productimg/${file.filename}`,
-        link: req.body.dynamicLinks?.[existingDynamicImages.length + index] || "",
-      }));
+    if (req.files?.dynamicImages?.length > 0) {
+      uploadedImages = req.files.dynamicImages.map((file, index) => {
+        const actualIndex = existingDynamicImages.length + index;
+
+        return {
+          fileUrl: `${req.protocol}://${req.get("host")}/uploads/cards/productimg/${file.filename}`,
+          link: dynamicLinks[actualIndex] || "",
+          title: dynamicTitles[actualIndex] || "",
+        };
+      });
     }
 
-    updateData.dynamicImgFiles = [...existingDynamicImages, ...uploadedImages];
+    updateData.dynamicImgFiles = [
+      ...existingDynamicImages,
+      ...uploadedImages,
+    ];
 
     /* --------------------------------------------
-     3️⃣ Handle Profile Image Upload
+     4️⃣ Profile Image Upload
     -------------------------------------------- */
-    if (req.files?.profileImage && req.files.profileImage.length > 0) {
-      updateData.profileImage = `${req.protocol}://${req.get("host")}/uploads/cards/profile/${req.files.profileImage[0].filename}`;
+    if (req.files?.profileImage?.length > 0) {
+      updateData.profileImage = `${req.protocol}://${req.get(
+        "host"
+      )}/uploads/cards/profile/${req.files.profileImage[0].filename}`;
     }
 
     /* --------------------------------------------
-     4️⃣ Update Database
+     5️⃣ Update Database
     -------------------------------------------- */
-    const updatedCard = await Card.findByIdAndUpdate(cardId, updateData, { new: true });
+    const updatedCard = await Card.findByIdAndUpdate(
+      cardId,
+      updateData,
+      { new: true }
+    );
 
     return res.json({
       success: true,
@@ -474,7 +503,11 @@ export const updateCardById = async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ success: false, error: "Update failed", details: err.message });
+    return res.status(500).json({
+      success: false,
+      error: "Update failed",
+      details: err.message,
+    });
   }
 };
 
