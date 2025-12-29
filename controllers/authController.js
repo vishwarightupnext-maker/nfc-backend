@@ -349,3 +349,67 @@ export const getMe = async (req, res) => {
   }
 };
 
+
+
+// ---------------- DELETE USER ----------------
+export const deleteUser = async (req, res) => {
+  try {
+    const { userId } = req.params; // /users/:userId
+    const loggedInUser = req.user;
+
+    const userToDelete = await User.findById(userId);
+    if (!userToDelete) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // ❌ Never allow deleting super-admin
+    if (userToDelete.role === "super-admin") {
+      return res
+        .status(403)
+        .json({ message: "Super Admin cannot be deleted" });
+    }
+
+    // 👤 SELF DELETE
+    if (loggedInUser.id === userId) {
+      if (loggedInUser.role === "super-admin") {
+        return res
+          .status(403)
+          .json({ message: "Super Admin cannot delete own account" });
+      }
+
+      await userToDelete.deleteOne();
+      return res.json({ message: "Account deleted successfully" });
+    }
+
+    // 🛡 ROLE-BASED DELETE
+    if (loggedInUser.role === "admin") {
+      // Admin can only delete normal users
+      if (userToDelete.role !== "user") {
+        return res
+          .status(403)
+          .json({ message: "Admin can delete only users" });
+      }
+    }
+
+    if (loggedInUser.role !== "super-admin" && loggedInUser.role !== "admin") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    await userToDelete.deleteOne();
+
+    res.json({
+      message: "User deleted successfully",
+      deletedUser: {
+        id: userToDelete._id,
+        name: userToDelete.name,
+        role: userToDelete.role,
+      },
+    });
+  } catch (error) {
+    console.error("DELETE USER ERROR:", error);
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};

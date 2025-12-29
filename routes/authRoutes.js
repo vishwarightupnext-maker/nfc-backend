@@ -9,7 +9,8 @@ import {
   updateUserRole,
   updateAdminCount,
   getAllAdmins,
-  getMe
+  getMe,
+  deleteUser,
 } from "../controllers/authController.js";
 
 import auth from "../middlewares/auth.js";
@@ -89,5 +90,14 @@ router.get(
 
 
 router.get("/me", auth, getMe);
+
+router.delete(
+  "/users/:userId",
+  auth,
+  role("user", "admin", "super-admin"),
+  deleteUser
+);
+
+
 
 export default router; // ✅ KEEP THIS

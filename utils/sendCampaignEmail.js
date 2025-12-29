@@ -13,7 +13,7 @@ export const sendCampaignEmail = async (emails, title, message) => {
   });
 
   const mailOptions = {
-    from: `"Juzdrop" <${process.env.MAIL_USER}>`,
+    from: `"Happy Tap" <${process.env.MAIL_USER}>`,
     to: emails.join(","), // 👈 bulk emails
     subject: title,
     html: campaignTemplate({ title, message }),

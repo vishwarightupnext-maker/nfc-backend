@@ -5,6 +5,8 @@ import fs from "fs";
 import path from "path";
 import User from "../models/User.js";
 import razorpay from "../config/razorpay.js"
+// import { sendWelcomeEmail } from "../utils/email.js";
+import  { sendWelcomeEmail } from "../utils/sendWelcomeEmail.js";
 
 
 /* ============================================================
@@ -223,7 +225,6 @@ export const getRouteImages = async (req, res) => {
 export const createCard = async (req, res) => {
   try {
     const userId = req.user?.id;
-
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized: No user ID" });
     }
@@ -235,6 +236,7 @@ export const createCard = async (req, res) => {
 
     const {
       route,
+      email,
       frontImage1,
       backImage1,
       frontImage2,
@@ -245,58 +247,50 @@ export const createCard = async (req, res) => {
       ...rest
     } = req.body;
 
-    /* -------------------------------------------------------
-       ✅ EXTRA ADDRESS VALIDATION
-    -------------------------------------------------------- */
+    /* ---------------- EMAIL VALIDATION ---------------- */
+    if (!email?.trim()) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email address" });
+    }
+
+    /* ---------------- ADDRESS VALIDATION ---------------- */
     if (!extraAddress) {
       return res.status(400).json({ message: "Extra address is required" });
     }
 
     const { doorNo, street, city, state, pinCode, phoneNumber } = extraAddress;
-
     if (!doorNo || !street || !city || !state || !pinCode || !phoneNumber) {
       return res.status(400).json({
         message: "All address fields including mobile number are required",
       });
     }
 
-    const phoneRegex = /^\+?[0-9]{10,15}$/;
-    if (!phoneRegex.test(phoneNumber)) {
+    if (!/^\+?[0-9]{10,15}$/.test(phoneNumber)) {
       return res.status(400).json({ message: "Invalid mobile number" });
     }
 
-    /* -------------------------------------------------------
-       ROUTE UNIQUE CHECK
-    -------------------------------------------------------- */
-    const exists = await Card.findOne({ route });
-    if (exists) {
+    /* ---------------- ROUTE UNIQUE ---------------- */
+    if (await Card.findOne({ route })) {
       return res.status(400).json({ message: "Route already exists" });
     }
 
-    /* -------------------------------------------------------
-       ROLE BASED LIMIT LOGIC
-    -------------------------------------------------------- */
-
-    // USER → only one card
-   
-
-    // ADMIN → limit
-    if (user.role === "admin") {
-      if (user.cardsCreated >= user.cardLimit) {
-        return res.status(400).json({
-          message: "Card limit reached",
-          availableCards: user.cardLimit - user.cardsCreated,
-        });
-      }
+    /* ---------------- ADMIN LIMIT ---------------- */
+    if (user.role === "admin" && user.cardsCreated >= user.cardLimit) {
+      return res.status(400).json({
+        message: "Card limit reached",
+        availableCards: user.cardLimit - user.cardsCreated,
+      });
     }
 
-    /* -------------------------------------------------------
-       SAVE IMAGES
-    -------------------------------------------------------- */
+    /* ---------------- SAVE IMAGES ---------------- */
     const front1 = saveBase64ToRouteFolder(frontImage1, route, "front1");
-    const back1  = saveBase64ToRouteFolder(backImage1,  route, "back1");
+    const back1  = saveBase64ToRouteFolder(backImage1, route, "back1");
     const front2 = saveBase64ToRouteFolder(frontImage2, route, "front2");
-    const back2  = saveBase64ToRouteFolder(backImage2,  route, "back2");
+    const back2  = saveBase64ToRouteFolder(backImage2, route, "back2");
 
     const profileImageUrl = profileImage
       ? saveBase64ToRouteFolder(profileImage, route, "profile")
@@ -306,26 +300,25 @@ export const createCard = async (req, res) => {
       ? saveBase64ToRouteFolder(faceImage, route, "face")
       : null;
 
-    /* -------------------------------------------------------
-       CREATE CARD (DEFAULT: UNPAID)
-    -------------------------------------------------------- */
+    /* ---------------- CREATE CARD ---------------- */
     const card = await Card.create({
       ...rest,
+      email,
       route,
       userId,
       extraAddress,
       fourCards: { front1, back1, front2, back2 },
       profileImage: profileImageUrl,
       face: faceImageUrl,
+      isPaid: false,
+      emailSent: false, // 🔐 IMPORTANT
     });
 
-    /* -------------------------------------------------------
-       ADMIN / SUPER ADMIN → FREE (NO PAYMENT)
-    -------------------------------------------------------- */
+    /* ---------------- ADMIN / SUPER ADMIN ---------------- */
     if (user.role !== "user") {
       card.isPaid = true;
       card.paymentStatus = "paid";
-      card.expiresAt = null;
+      card.emailSent = true;
       await card.save();
 
       if (user.role === "admin") {
@@ -333,19 +326,24 @@ export const createCard = async (req, res) => {
         await user.save();
       }
 
+ await sendWelcomeEmail({
+  to: card.email,
+  name: card.name,
+  route: `https://www.happytap.in/${card.route}`,
+  cardId: card._id, // ✅ CORRECT
+});
+
+
       return res.status(201).json({
         success: true,
         paymentRequired: false,
-        message: "Card created successfully",
         card,
       });
     }
 
-    /* -------------------------------------------------------
-       USER → RAZORPAY PAYMENT REQUIRED
-    -------------------------------------------------------- */
+    /* ---------------- USER → PAYMENT REQUIRED ---------------- */
     const order = await razorpay.orders.create({
-      amount: 499 * 100, // ₹499
+      amount: 499 * 100,
       currency: "INR",
       receipt: `card_${card._id}`,
     });
@@ -353,18 +351,21 @@ export const createCard = async (req, res) => {
     card.paymentOrderId = order.id;
     await card.save();
 
+    // ❌ NO EMAIL HERE (CORRECT)
+
     return res.status(201).json({
       success: true,
       paymentRequired: true,
-      message: "Card created. Payment required.",
       cardId: card._id,
       order,
     });
+
   } catch (error) {
     console.error("Create card error:", error);
     res.status(500).json({ message: error.message });
   }
 };
+
 
 
 /* ============================================================
